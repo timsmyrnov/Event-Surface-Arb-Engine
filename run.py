@@ -1,9 +1,10 @@
+import json
 import breeden_litzenberger as bl
 import black_scholes as bs
 import get_heston_inputs as ghi
 import pred_market_data as pmd
 
-def run(mkt):
+def run_bl(mkt):
     strikes = mkt.strikes
     if len(strikes) < 3:
         raise ValueError("Need at least 3 strikes for BL second derivative")
@@ -30,28 +31,75 @@ def run(mkt):
         dK=dK,
     )
 
+def parse_price_range(label: str,
+                      default_min: int = 0,
+                      default_max: int = 1_000_000_000) -> tuple[int, int]:
+    s = label.replace("$", "").replace(",", "").strip()
+
+    if "-" in s:
+        lo_str, hi_str = s.split("-", 1)
+        lo = int(lo_str)
+        hi = int(hi_str)
+        return lo, hi
+
+    if s.startswith("<"):
+        hi = int(s[1:].strip())
+        return default_min, hi
+
+    if s.startswith(">"):
+        lo = int(s[1:].strip())
+        return lo, default_max
+
+    raise ValueError(f"Unrecognized price range label: {label!r}")
+
+def compute_edge(data, event_links):
+    for ticker, outcomes in data.items():
+        url = event_links.get(ticker)
+        expiry_dt = pmd.get_event_expiry(url)
+        expiry = expiry_dt.date().strftime("%Y-%m-%d")
+
+        for price, prob in outcomes.items():
+            price_range = parse_price_range(price)
+
+            mkt_data = ghi.get_market_inputs_from_yf(ticker, expiry)
+            bl_model = run_bl(mkt_data)
+            bl_prob_norm = bl_model.prob_between(
+                price_range[0], price_range[1], renormalize=True
+            )
+
+            print(f"Ticker: {ticker}, Price Range: {price}")
+            print(
+                f"Polymarket P: {prob}, Actual P: {bl_prob_norm}, "
+                f"Expected Edge: {abs(prob - bl_prob_norm)}"
+            )
+
 def main():
-    ticker = "^SPX"
-    expiry = "2025-12-31"
+    # bl_model.compute_pdf()
+    # bs_model = bs.LognormalPDF(ticker, expiry)
 
-    mkt = ghi.get_market_inputs_from_yf(ticker, expiry)
-    bl_model = run(mkt)
-    bs_model = bs.LognormalPDF(ticker, expiry)
+    # bl_model.plot_pdf()
+    # bs_model.plot_pdf()
 
-    bl_model.compute_pdf()
-    bl_model.plot_pdf()
-    bs_model.plot_pdf()
+    # bl_p_raw = bl_model.prob_between(6200, 6400, renormalize=False)
+    # bl_p_norm = bl_model.prob_between(6200, 6400, renormalize=True)
 
-    bl_p_raw = bl_model.prob_between(6200, 6400, renormalize=False)
-    bl_p_norm = bl_model.prob_between(6200, 6400, renormalize=True)
+    # bs_p_raw = bs_model.prob_between(6200, 6400, renormalize=False)
+    # bs_p_norm = bs_model.prob_between(6200, 6400, renormalize=True)
 
-    bs_p_raw = bs_model.prob_between(6200, 6400, renormalize=False)
-    bs_p_norm = bs_model.prob_between(6200, 6400, renormalize=True)
+    # print("BL Raw prob      =", bl_p_raw)
+    # print("BL Renormalized prob =", bl_p_norm)
+    # print("BS Raw prob       =", bs_p_raw)
+    # print("BS Renormalized prob =", bs_p_norm)
 
-    print("BL Raw prob      =", bl_p_raw)
-    print("BL Renormalized prob =", bl_p_norm)
-    print("BS Raw prob       =", bs_p_raw)
-    print("BS Renormalized prob =", bs_p_norm)
+    event_links = {
+        "NVDA": "https://polymarket.com/event/nvda-week-november-21-2025?tid=1763587728930",
+        # "TSLA": "https://polymarket.com/event/tsla-above-in-november-2025?tid=1763587682040",
+        # "PLTR": "https://polymarket.com/event/pltr-above-in-november-2025?tid=1763587666119",
+    }
+
+    pred_market_data = pmd.parse_events_data(event_links.values())
+    compute_edge(pred_market_data, event_links)
+    # print(json.dumps(pred_market_data, indent=2))
 
 if __name__ == "__main__":
     main()

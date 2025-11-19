@@ -15,7 +15,6 @@ class MarketInputs:
     put_mid: np.ndarray
     atm_iv: float | None
 
-# proxy for risk-free rate
 def _get_risk_free_rate_from_irx() -> float:
     irx = yf.Ticker("^IRX")
     hist = irx.history(period="5d")
@@ -39,8 +38,35 @@ def get_market_inputs_from_yf(
     S0 = float(hist["Close"].iloc[-1])
 
     today = dt.datetime.utcnow().date()
-    expiry_date = dt.datetime.strptime(expiry, "%Y-%m-%d").date()
-    days_to_expiry = (expiry_date - today).days
+    requested_expiry_date = dt.datetime.strptime(expiry, "%Y-%m-%d").date()
+
+    available_expiries = list(getattr(tk, "options", []))
+    if not available_expiries:
+        raise ValueError(f"No listed options expiries for {ticker}")
+
+    available_dates = [
+        dt.datetime.strptime(e, "%Y-%m-%d").date() for e in available_expiries
+    ]
+
+    if expiry in available_expiries:
+        chosen_expiry_date = requested_expiry_date
+        chosen_expiry_str = expiry
+    else:
+        future_candidates = [
+            d for d in available_dates
+            if d >= requested_expiry_date and d > today
+        ]
+
+        if not future_candidates:
+            future_candidates = [d for d in available_dates if d > today]
+
+        if not future_candidates:
+            raise ValueError(f"No future expiries available for {ticker}")
+
+        chosen_expiry_date = min(future_candidates)
+        chosen_expiry_str = chosen_expiry_date.strftime("%Y-%m-%d")
+
+    days_to_expiry = (chosen_expiry_date - today).days
     if days_to_expiry <= 0:
         raise ValueError("Expiry is not in the future")
 
@@ -51,7 +77,7 @@ def get_market_inputs_from_yf(
     else:
         r = _get_risk_free_rate_from_irx()
 
-    opt_chain = tk.option_chain(expiry)
+    opt_chain = tk.option_chain(chosen_expiry_str)
     calls = opt_chain.calls.copy()
     puts = opt_chain.puts.copy()
 
@@ -74,7 +100,7 @@ def get_market_inputs_from_yf(
 
     return MarketInputs(
         ticker=ticker,
-        expiry=expiry,
+        expiry=chosen_expiry_str,
         S0=S0,
         tau=tau,
         r=r,

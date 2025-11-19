@@ -1,3 +1,4 @@
+from datetime import datetime
 import requests
 import json
 from urllib.parse import urlparse
@@ -97,6 +98,33 @@ def _parse_probabilities(raw):
     return probs
 
 
+def get_event_expiry(url: str):
+    slug = _extract_slug(url)
+    if slug is None:
+        return None
+
+    resp = requests.get(f"{GAMMA_BASE_URL}/events/slug/{slug}", timeout=10)
+    if resp.status_code != 200:
+        return None
+
+    event = resp.json()
+    markets = event.get("markets") or []
+    if not markets:
+        return None
+
+    end_str = (
+        markets[0].get("endDateIso")
+        or markets[0].get("endDate")
+        or event.get("endDateIso")
+        or event.get("endDate")
+    )
+    if not end_str:
+        return None
+
+    end_str = end_str.replace("Z", "+00:00")
+    return datetime.fromisoformat(end_str)
+
+
 def parse_events_data(links):
     output: dict[str, dict[str, float]] = {}
 
@@ -138,9 +166,9 @@ def parse_events_data(links):
 
 if __name__ == "__main__":
     links = {
-        "https://polymarket.com/event/nvda-week-november-21-2025?tid=1763587728930",
-        "https://polymarket.com/event/tsla-above-in-november-2025?tid=1763587682040",
-        "https://polymarket.com/event/pltr-above-in-november-2025?tid=1763587666119",
+        "NVDA": "https://polymarket.com/event/nvda-week-november-21-2025?tid=1763587728930",
+        # "TSLA": "https://polymarket.com/event/tsla-above-in-november-2025?tid=1763587682040",
+        # "PLTR": "https://polymarket.com/event/pltr-above-in-november-2025?tid=1763587666119",
     }
 
     data = parse_events_data(links)
