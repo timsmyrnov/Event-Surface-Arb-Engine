@@ -1,7 +1,9 @@
 import requests
 import json
+from urllib.parse import urlparse
 
 GAMMA_BASE_URL = "https://gamma-api.polymarket.com"
+
 
 def get_markets(limit: int = 50, offset: int = 0):
     url = f"{GAMMA_BASE_URL}/markets"
@@ -12,12 +14,13 @@ def get_markets(limit: int = 50, offset: int = 0):
         "order": "endDate",
         "ascending": "true",
         "end_date_min": "2025-11-19T00:00:00Z",
-        "end_date_max": "2025-11-20T00:00:00Z"
+        "end_date_max": "2025-12-31T00:00:00Z",
     }
 
     r = requests.get(url, params=params, timeout=10)
     r.raise_for_status()
     return r.json()
+
 
 def parse_outcomes(raw):
     if raw is None:
@@ -34,28 +37,111 @@ def parse_outcomes(raw):
 
     return [str(raw)]
 
-def print_simple_market_info(market: dict):
-    outcomes = ", ".join(parse_outcomes(market.get("outcomes"))) or "N/A"
 
-    print("\n=== Market ===")
-    print("ID:        ", market.get("id"))
-    print("Question:  ", market.get("question"))
-    print("Slug:      ", market.get("slug"))
-    print("Category:  ", market.get("category"))
-    print("Outcomes:  ", outcomes)
-    print("Active:    ", market.get("active"))
-    print("Closed:    ", market.get("closed"))
-    print("End Date:  ", market.get("endDate"))
-    print("==============")
+def _extract_ticker(url: str) -> str | None:
+    parsed = urlparse(url)
+    path = parsed.path
+
+    parts = [p for p in path.split("/") if p]
+    if len(parts) < 2 or parts[0] != "event":
+        return None
+
+    slug = parts[1]
+    ticker = slug.split("-")[0]
+    return ticker.upper()
+
+
+def _extract_slug(url: str) -> str | None:
+    parsed = urlparse(url)
+    parts = [p for p in parsed.path.split("/") if p]
+    if len(parts) < 2 or parts[0] not in {"event", "market"}:
+        return None
+    return parts[1]
+
+
+def _get_markets_for_slug(slug: str):
+    url_event = f"{GAMMA_BASE_URL}/events/slug/{slug}"
+    try:
+        r = requests.get(url_event, timeout=10)
+        if r.status_code == 200:
+            event = r.json()
+            markets = event.get("markets") or []
+            return markets
+        if r.status_code != 404:
+            r.raise_for_status()
+    except Exception:
+        pass
+
+    url_market = f"{GAMMA_BASE_URL}/markets/slug/{slug}"
+    try:
+        r2 = requests.get(url_market, timeout=10)
+        if r2.status_code == 200:
+            market = r2.json()
+            return [market]
+        if r2.status_code != 404:
+            r2.raise_for_status()
+    except Exception:
+        pass
+
+    return []
+
+
+def _parse_probabilities(raw):
+    vals = parse_outcomes(raw)
+    probs = []
+    for v in vals:
+        try:
+            probs.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    return probs
+
+
+def parse_events_data(links):
+    output: dict[str, dict[str, float]] = {}
+
+    for url in links:
+        slug = _extract_slug(url)
+        ticker = _extract_ticker(url)
+
+        if slug is None or ticker is None:
+            continue
+
+        markets = _get_markets_for_slug(slug)
+        if not markets:
+            continue
+
+        if ticker not in output:
+            output[ticker] = {}
+
+        for m in markets:
+            outcomes = parse_outcomes(m.get("outcomes"))
+            probs = _parse_probabilities(m.get("outcomePrices"))
+
+            label = (
+                m.get("groupItemTitle")
+                or m.get("groupItemRange")
+                or m.get("question")
+            )
+
+            yes_p = None
+            if "Yes" in outcomes:
+                yes_idx = outcomes.index("Yes")
+                if yes_idx < len(probs):
+                    yes_p = probs[yes_idx]
+
+            if label and yes_p is not None:
+                output[ticker][label] = yes_p
+
+    return output
+
 
 if __name__ == "__main__":
-    markets = get_markets(limit=20, offset=0)
+    links = {
+        "https://polymarket.com/event/nvda-week-november-21-2025?tid=1763587728930",
+        "https://polymarket.com/event/tsla-above-in-november-2025?tid=1763587682040",
+        "https://polymarket.com/event/pltr-above-in-november-2025?tid=1763587666119",
+    }
 
-    if not markets:
-        print("No markets returned.")
-        raise SystemExit(0)
-
-    print(f"Got {len(markets)} markets.")
-
-    for m in markets[:20]:
-        print_simple_market_info(m)
+    data = parse_events_data(links)
+    print(json.dumps(data, indent=2))

@@ -31,8 +31,8 @@ def run(mkt):
     )
 
 def main():
-    ticker = "NVDA"
-    expiry = "2025-12-19"
+    ticker = "^SPX"
+    expiry = "2025-12-31"
 
     mkt = ghi.get_market_inputs_from_yf(ticker, expiry)
     bl_model = run(mkt)
@@ -42,16 +42,16 @@ def main():
     bl_model.plot_pdf()
     bs_model.plot_pdf()
 
-    bl_p_raw = bl_model.prob_between(175, 180, renormalize=False)
-    bl_p_norm = bl_model.prob_between(175, 180, renormalize=True)
+    bl_p_raw = bl_model.prob_between(6200, 6400, renormalize=False)
+    bl_p_norm = bl_model.prob_between(6200, 6400, renormalize=True)
 
-    bs_p_raw = bs_model.prob_between(175, 180, renormalize=False)
-    bs_p_norm = bs_model.prob_between(175, 180, renormalize=True)
+    bs_p_raw = bs_model.prob_between(6200, 6400, renormalize=False)
+    bs_p_norm = bs_model.prob_between(6200, 6400, renormalize=True)
 
-    print("BL Raw prob[175,180]       =", bl_p_raw)
-    print("BL Renormalized prob[175,180] =", bl_p_norm)
-    print("BS Raw prob[175,180]       =", bs_p_raw)
-    print("BS Renormalized prob[175,180] =", bs_p_norm)
+    print("BL Raw prob      =", bl_p_raw)
+    print("BL Renormalized prob =", bl_p_norm)
+    print("BS Raw prob       =", bs_p_raw)
+    print("BS Renormalized prob =", bs_p_norm)
 
 if __name__ == "__main__":
     main()
