@@ -139,6 +139,29 @@ class HestonBL:
                 "pdf_BL": pdf_BL,
             }
         )
+    
+    def prob_between(self, K_low, K_high, renormalize=False):
+        if self.pdf_BL is None or self.strikes is None:
+            self.compute_pdf()
+
+        strikes = self.strikes
+        pdf_BL = self.pdf_BL
+
+        mask = (~np.isnan(pdf_BL)) & (strikes >= K_low) & (strikes <= K_high)
+
+        if not np.any(mask):
+            return 0.0
+
+        num = np.trapz(pdf_BL[mask], strikes[mask])
+
+        if not renormalize:
+            return num
+
+        mask_all = ~np.isnan(pdf_BL)
+        denom = np.trapz(pdf_BL[mask_all], strikes[mask_all])
+        if denom <= 0:
+            return num
+        return num / denom
 
     # ==========================
     # Plot the Breeden–Litzenberger PDF

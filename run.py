@@ -1,9 +1,9 @@
 import breeden_litzenberger as bl
+import black_scholes as bs
 import get_heston_inputs as ghi
 import pred_market_data as pmd
 
-
-def main(mkt):
+def run(mkt):
     strikes = mkt.strikes
     if len(strikes) < 3:
         raise ValueError("Need at least 3 strikes for BL second derivative")
@@ -30,15 +30,28 @@ def main(mkt):
         dK=dK,
     )
 
-
 def main():
-    ticker = "GLD"
+    ticker = "NVDA"
     expiry = "2025-12-19"
 
     mkt = ghi.get_market_inputs_from_yf(ticker, expiry)
-    model = main(mkt)
-    model.compute_pdf()
-    model.plot_pdf()
+    bl_model = run(mkt)
+    bs_model = bs.LognormalPDF(ticker, expiry)
+
+    bl_model.compute_pdf()
+    bl_model.plot_pdf()
+    bs_model.plot_pdf()
+
+    bl_p_raw = bl_model.prob_between(175, 180, renormalize=False)
+    bl_p_norm = bl_model.prob_between(175, 180, renormalize=True)
+
+    bs_p_raw = bs_model.prob_between(175, 180, renormalize=False)
+    bs_p_norm = bs_model.prob_between(175, 180, renormalize=True)
+
+    print("BL Raw prob[175,180]       =", bl_p_raw)
+    print("BL Renormalized prob[175,180] =", bl_p_norm)
+    print("BS Raw prob[175,180]       =", bs_p_raw)
+    print("BS Renormalized prob[175,180] =", bs_p_norm)
 
 if __name__ == "__main__":
     main()
