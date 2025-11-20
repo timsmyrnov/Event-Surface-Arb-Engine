@@ -137,3 +137,6 @@ class LognormalPDF:
             plt.show()
 
         return ax
+    
+if __name__ == "__main__":
+    ...

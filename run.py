@@ -93,7 +93,7 @@ def compute_edge(data, event_links):
                 price_range[0], price_range[1], renormalize=True
             )
 
-            print(f"Ticker: {ticker}, Price Range: {price_range[0], price_range[1]}")
+            print(f"\nTicker: {ticker}, Price Range: {price_range[0], price_range[1]}")
             print(
                 f"Polymarket P: {prob}, Actual P: {bl_prob_norm}, "
                 f"Expected Edge: {abs(prob - bl_prob_norm)}"
